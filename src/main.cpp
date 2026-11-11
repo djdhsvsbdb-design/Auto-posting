@@ -18,7 +18,7 @@ namespace {
     double g_elapsedSeconds = 0.0;
     double g_pendingSeconds = 0.0;
     bool g_requestPending = false;
-    bool g_requestTimedOut = false;
+    bool g_firstAttempt = true;
     bool g_wasEnabled = false;
     int g_lastLevelID = 0;
     int64_t g_lastIntervalMinutes = 5;
@@ -67,10 +67,14 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
             // It may still complete on the game server.
             if (g_wasEnabled) {
                 resetTimer();
-                g_requestTimedOut = false;
+                g_firstAttempt = true;
             }
             g_wasEnabled = false;
             return;
+        }
+        if (!g_wasEnabled) {
+            resetTimer();
+            g_firstAttempt = true;
         }
         g_wasEnabled = true;
 
@@ -91,6 +95,7 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
         if (levelID != g_lastLevelID || comment != g_lastComment ||
             interval != g_lastIntervalMinutes) {
             resetTimer();
+            g_firstAttempt = true;
             g_lastLevelID = levelID;
             g_lastComment = comment;
             g_lastIntervalMinutes = interval;
@@ -105,21 +110,17 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
             if (g_pendingSeconds < kRequestTimeoutSeconds) {
                 return;
             }
-            log::warn("AutoComment request timed out. Automatic retries are paused to avoid duplicate comments; toggle posting off and on to retry.");
+            log::warn("AutoComment request timed out without a server callback; will retry after the configured interval.");
             g_requestPending = false;
-            g_requestTimedOut = true;
             g_pendingSeconds = 0.0;
             g_elapsedSeconds = 0.0;
         }
 
-        // The game API call currently exposes no completion callback here.
-        // Do not blindly retry a timed-out request: it may have reached the server.
-        if (g_requestTimedOut) {
-            return;
-        }
-
         g_elapsedSeconds += dt;
-        if (g_elapsedSeconds < static_cast<double>(interval) * kSecondsPerMinute) {
+        auto requiredDelay = g_firstAttempt
+            ? 1.0
+            : static_cast<double>(interval) * kSecondsPerMinute;
+        if (g_elapsedSeconds < requiredDelay) {
             return;
         }
 
@@ -127,6 +128,7 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
         g_requestPending = true;
         g_pendingSeconds = 0.0;
         g_elapsedSeconds = 0.0;
+        g_firstAttempt = false;
 
         GameLevelManager::sharedState()->uploadComment(
             comment,
@@ -136,6 +138,23 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
         );
 
         log::info("AutoComment submitted a level-comment upload request for level {}", levelID);
+    }
+
+    // Geometry Dash calls this when the comment request finishes. Releasing
+    // the lock here allows the next scheduled comment instead of getting stuck.
+    void onUploadCommentCompleted(gd::string response, gd::string tag) {
+        GameLevelManager::onUploadCommentCompleted(response, tag);
+
+        g_requestPending = false;
+        g_pendingSeconds = 0.0;
+        g_elapsedSeconds = 0.0;
+
+        if (response == "1") {
+            log::info("AutoComment: Geometry Dash accepted the comment request.");
+        }
+        else {
+            log::warn("AutoComment: comment request returned response: {}", response);
+        }
     }
 };
 
