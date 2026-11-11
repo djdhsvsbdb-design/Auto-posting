@@ -13,9 +13,13 @@ An Android Geode mod project.
 ## Safe posting flow
 The mod can prepare the comment and schedule reminders, but each actual publication requires an explicit in-game confirmation. It will not silently publish repeated comments in the background.
 
-## Development status
-Initial project specification. Native Geode implementation and Android build are not yet available.
+## Target
+- Geometry Dash Android: `2.2081`
+- Geode: `v5.11.2` (target metadata; SDK build still needs verification)
+- Android architecture/build: to be selected for the user's device
 
-## Requirements to confirm
-- Geometry Dash version
-- Geode version / SDK compatibility
+## Development status
+Initial Geode project scaffold committed (`mod.json`, `CMakeLists.txt`, `src/main.cpp`). This is **not a finished mod** and no `.geode` package has been built or tested yet. The source currently logs when loaded; the settings-driven reminder UI is the next implementation step.
+
+## Posting behavior
+The planned interval has a 5-minute minimum. The mod may prepare reminders, but each comment publication must be explicitly confirmed in-game; it will not silently post repeated comments.
