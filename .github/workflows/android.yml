@@ -11,22 +11,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Android 32-bit
+        config:
+          - name: Android32
             target: Android32
-          - name: Android 64-bit
+          - name: Android64
             target: Android64
-    name: ${{ matrix.name }}
+    name: ${{ matrix.config.name }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Build Geode mod
+      - name: Build the mod
         uses: geode-sdk/build-geode-mod@main
         with:
-          target: ${{ matrix.target }}
           combine: true
-      - name: Upload build output
-        uses: actions/upload-artifact@v7
+          target: ${{ matrix.config.target }}
+
+  package:
+    name: Package Android builds
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: geode-sdk/build-geode-mod/combine@main
+        id: build
+      - uses: actions/upload-artifact@v7
         with:
-          name: AutoComment-${{ matrix.target }}
-          path: build
+          name: AutoComment-Android
+          path: ${{ steps.build.outputs.build-output }}
