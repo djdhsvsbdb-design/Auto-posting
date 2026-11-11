@@ -9,22 +9,28 @@ AutoComment is a Geode mod targeting Geometry Dash Android 2.2081.
 - **Posting interval** — 5 minutes to 24 hours.
 - **Enable automatic posting** — turns the scheduler on or off.
 
-## Implementation
+## Runtime behavior
 
-- The timer is scheduled on the long-lived `GameLevelManager` singleton rather than `MenuLayer`, so it is not tied to the main-menu screen.
+- The scheduler is attached to the long-lived `GameLevelManager`, not to `MenuLayer`. It is intended to keep ticking in the main menu, editor, and levels while the game process is running.
+- Closing Geometry Dash stops the mod and its timer. It does not run as an independent Android background service.
 - Level IDs are parsed strictly; trailing characters, non-numeric values, zero, and negative values are rejected.
 - Blank comment text is rejected after trimming whitespace.
-- The interval is clamped to the supported range (5–1440 minutes) even if a stored setting is invalid.
-- The timer resets when posting is disabled or the configured level/comment changes.
-- A request lock prevents immediate duplicate calls while a request is pending. If no completion is observed within 90 seconds, the lock expires and the next interval can retry.
+- The interval is clamped to 5–1440 minutes. Changing the level, comment, or interval restarts the timer.
+- Disabling posting resets the elapsed timer but does not discard an in-flight request.
+
+## Request handling and known limitations
+
+The mod calls the game's own `GameLevelManager::uploadComment` method. The current implementation does not yet observe a definitive upload-completion callback. If a request remains pending for 90 seconds, automatic retries are paused rather than risking a duplicate comment. Toggle automatic posting off and on to explicitly retry.
+
+The log message confirms that the game upload method was called; it does **not** prove that the server accepted or published the comment.
 
 ## Build and verification status
 
 Target game version: **2.2081 Android**  
 Geode metadata version: **v5.11.2**
 
-The source and workflow have not yet been confirmed by a successful Android build or an on-device test. The request lock uses a timeout because the current implementation does not yet consume the game's upload-completion callback; a timed-out request may have succeeded remotely, so a later retry could create a duplicate comment. Treat this as an unverified development build, not a finished release.
+The source has not yet been confirmed by a successful Android build or an on-device test. Treat this as an unverified development build, not a finished release.
 
 ## Build targets
 
-GitHub Actions is configured to build Android32 and Android64 variants and combine their packages into one artifact.
+GitHub Actions is configured for Android32 and Android64 builds. A green workflow and an on-device test are still required to verify compatibility.
