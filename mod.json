@@ -22,7 +22,7 @@
       "default": ""
     },
     "interval-minutes": {
-      "name": "Reminder interval (minutes)",
+      "name": "Posting interval (minutes)",
       "description": "Time between automatic comment submissions. Minimum 5 minutes.",
       "type": "int",
       "default": 5,
@@ -33,7 +33,7 @@
       "name": "Enable automatic posting",
       "type": "bool",
       "default": false,
-      "description": "When enabled, submit the configured comment repeatedly while the main menu is open."
+      "description": "When enabled, submit the configured level comment repeatedly at the selected interval while the game is running."
     }
   },
   "dependencies": {
