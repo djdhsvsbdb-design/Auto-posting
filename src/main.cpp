@@ -18,7 +18,10 @@ namespace {
     double g_elapsedSeconds = 0.0;
     double g_pendingSeconds = 0.0;
     bool g_requestPending = false;
+    bool g_requestTimedOut = false;
+    bool g_wasEnabled = false;
     int g_lastLevelID = 0;
+    int64_t g_lastIntervalMinutes = 5;
     std::string g_lastComment;
 
     bool parseLevelID(std::string const& raw, int& out) {
@@ -46,10 +49,8 @@ namespace {
         return std::string(first, last);
     }
 
-    void resetSchedule() {
+    void resetTimer() {
         g_elapsedSeconds = 0.0;
-        g_pendingSeconds = 0.0;
-        g_requestPending = false;
     }
 }
 
@@ -60,25 +61,39 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
         GameLevelManager::update(dt);
 
         auto mod = Mod::get();
-        if (!mod->getSettingValue<bool>("enabled")) {
-            resetSchedule();
+        auto enabled = mod->getSettingValue<bool>("enabled");
+        if (!enabled) {
+            // Do not discard an in-flight request when the user disables the mod.
+            // It may still complete on the game server.
+            if (g_wasEnabled) {
+                resetTimer();
+                g_requestTimedOut = false;
+            }
+            g_wasEnabled = false;
             return;
         }
+        g_wasEnabled = true;
 
         auto rawID = mod->getSettingValue<std::string>("level-id");
         auto comment = trim(mod->getSettingValue<std::string>("comment-text"));
 
         int levelID = 0;
         if (!parseLevelID(rawID, levelID) || comment.empty()) {
-            resetSchedule();
+            resetTimer();
             return;
         }
 
         // A changed target/comment starts a fresh interval.
-        if (levelID != g_lastLevelID || comment != g_lastComment) {
-            resetSchedule();
+        auto interval = std::clamp<int64_t>(
+            mod->getSettingValue<int64_t>("interval-minutes"), 5, 1440
+        );
+
+        if (levelID != g_lastLevelID || comment != g_lastComment ||
+            interval != g_lastIntervalMinutes) {
+            resetTimer();
             g_lastLevelID = levelID;
             g_lastComment = comment;
+            g_lastIntervalMinutes = interval;
         }
 
         dt = std::max(0.0f, dt);
@@ -90,14 +105,18 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
             if (g_pendingSeconds < kRequestTimeoutSeconds) {
                 return;
             }
-            log::warn("AutoComment request timed out; the next interval will retry.");
+            log::warn("AutoComment request timed out. Automatic retries are paused to avoid duplicate comments; toggle posting off and on to retry.");
             g_requestPending = false;
+            g_requestTimedOut = true;
             g_pendingSeconds = 0.0;
             g_elapsedSeconds = 0.0;
         }
 
-        auto interval = mod->getSettingValue<int64_t>("interval-minutes");
-        interval = std::clamp<int64_t>(interval, 5, 1440);
+        // The game API call currently exposes no completion callback here.
+        // Do not blindly retry a timed-out request: it may have reached the server.
+        if (g_requestTimedOut) {
+            return;
+        }
 
         g_elapsedSeconds += dt;
         if (g_elapsedSeconds < static_cast<double>(interval) * kSecondsPerMinute) {
@@ -116,7 +135,7 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
             0
         );
 
-        log::info("AutoComment sent a level-comment upload request for level {}", levelID);
+        log::info("AutoComment submitted a level-comment upload request for level {}", levelID);
     }
 };
 
