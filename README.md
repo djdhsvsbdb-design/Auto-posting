@@ -20,9 +20,9 @@ AutoComment is a Geode mod targeting Geometry Dash Android 2.2081.
 
 ## Request handling and known limitations
 
-The mod calls the game's own `GameLevelManager::uploadComment` method. The current implementation does not yet observe a definitive upload-completion callback. If a request remains pending for 90 seconds, automatic retries are paused rather than risking a duplicate comment. Toggle automatic posting off and on to explicitly retry.
+The mod calls the game's own `GameLevelManager::uploadComment` method. The mod observes `GameLevelManager::onUploadCommentCompleted`. The callback releases the pending-request lock and logs the response and tag. A response other than `-1` is treated as a successful server response; `-1` is logged as failure. If no callback arrives within 90 seconds, the mod clears the lock and retries after the configured interval. The callback log is the best available signal here, but an on-device check is still needed to confirm that the comment appears on the target level.
 
-The log message confirms that the game upload method was called; it does **not** prove that the server accepted or published the comment.
+The completion callback logs the server response and tag. A response other than `-1` is treated as accepted; `-1` is treated as failure. A successful callback is stronger evidence than a local method call, but check the level in-game to confirm the comment is visible.
 
 ## Build and verification status
 
