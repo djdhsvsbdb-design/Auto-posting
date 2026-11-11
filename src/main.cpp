@@ -145,15 +145,20 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
     void onUploadCommentCompleted(gd::string response, gd::string tag) {
         GameLevelManager::onUploadCommentCompleted(response, tag);
 
+        // Ignore callbacks when AutoComment has no request in flight.
+        if (!g_requestPending) {
+            return;
+        }
+
         g_requestPending = false;
         g_pendingSeconds = 0.0;
         g_elapsedSeconds = 0.0;
 
         if (response != "-1") {
-            log::info("AutoComment: Geometry Dash accepted the comment request (response: {}).", response);
+            log::info("AutoComment: comment upload callback response: {}, tag: {}", response, tag);
         }
         else {
-            log::warn("AutoComment: comment request returned response: {}", response);
+            log::warn("AutoComment: comment upload failed (response: {}, tag: {})", response, tag);
         }
     }
 };
