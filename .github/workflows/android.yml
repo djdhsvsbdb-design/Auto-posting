@@ -1,0 +1,32 @@
+name: Build AutoComment (Android)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Android 32-bit
+            target: Android32
+          - name: Android 64-bit
+            target: Android64
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build Geode mod
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          target: ${{ matrix.target }}
+          combine: true
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: AutoComment-${{ matrix.target }}
+          path: build
