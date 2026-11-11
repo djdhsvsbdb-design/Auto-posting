@@ -1,22 +1,130 @@
 #include <Geode/Geode.hpp>
+#include <Geode/modify/GameLevelManager.hpp>
 #include <Geode/modify/MenuLayer.hpp>
+
+#include <algorithm>
+#include <charconv>
+#include <cctype>
+#include <string>
+#include <system_error>
 
 using namespace geode::prelude;
 
 namespace {
     constexpr double kSecondsPerMinute = 60.0;
+    constexpr double kRequestTimeoutSeconds = 90.0;
+
+    // Kept outside MenuLayer so the scheduler survives scene changes.
+    double g_elapsedSeconds = 0.0;
+    double g_pendingSeconds = 0.0;
+    bool g_requestPending = false;
+    int g_lastLevelID = 0;
+    std::string g_lastComment;
+
+    bool parseLevelID(std::string const& raw, int& out) {
+        if (raw.empty()) return false;
+
+        int parsed = 0;
+        auto const* begin = raw.data();
+        auto const* end = begin + raw.size();
+        auto result = std::from_chars(begin, end, parsed);
+
+        if (result.ec != std::errc{} || result.ptr != end || parsed <= 0) {
+            return false;
+        }
+
+        out = parsed;
+        return true;
+    }
+
+    std::string trim(std::string value) {
+        auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+        auto first = std::find_if(value.begin(), value.end(), notSpace);
+        auto last = std::find_if(value.rbegin(), value.rend(), notSpace).base();
+
+        if (first >= last) return {};
+        return std::string(first, last);
+    }
+
+    void resetSchedule() {
+        g_elapsedSeconds = 0.0;
+        g_pendingSeconds = 0.0;
+        g_requestPending = false;
+    }
 }
 
-class $modify(AutoCommentMenuLayer, MenuLayer) {
-    double m_autoCommentElapsed = 0.0;
-    bool m_autoCommentBusy = false;
+// GameLevelManager is a long-lived game singleton, unlike MenuLayer.
+// Scheduling on it keeps the timer active while changing menus/scenes.
+class $modify(AutoCommentGameLevelManager, GameLevelManager) {
+    void update(float dt) {
+        GameLevelManager::update(dt);
 
+        auto mod = Mod::get();
+        if (!mod->getSettingValue<bool>("enabled")) {
+            resetSchedule();
+            return;
+        }
+
+        auto rawID = mod->getSettingValue<std::string>("level-id");
+        auto comment = trim(mod->getSettingValue<std::string>("comment-text"));
+
+        int levelID = 0;
+        if (!parseLevelID(rawID, levelID) || comment.empty()) {
+            resetSchedule();
+            return;
+        }
+
+        // A changed target/comment starts a fresh interval.
+        if (levelID != g_lastLevelID || comment != g_lastComment) {
+            resetSchedule();
+            g_lastLevelID = levelID;
+            g_lastComment = comment;
+        }
+
+        dt = std::max(0.0f, dt);
+
+        // Keep the request lock until a conservative timeout. This prevents
+        // an immediate duplicate call while the game's network request runs.
+        if (g_requestPending) {
+            g_pendingSeconds += dt;
+            if (g_pendingSeconds < kRequestTimeoutSeconds) {
+                return;
+            }
+            log::warn("AutoComment request timed out; the next interval will retry.");
+            g_requestPending = false;
+            g_pendingSeconds = 0.0;
+            g_elapsedSeconds = 0.0;
+        }
+
+        auto interval = mod->getSettingValue<int64_t>("interval-minutes");
+        interval = std::clamp<int64_t>(interval, 5, 1440);
+
+        g_elapsedSeconds += dt;
+        if (g_elapsedSeconds < static_cast<double>(interval) * kSecondsPerMinute) {
+            return;
+        }
+
+        // Lock and reset before invoking the game's networking method.
+        g_requestPending = true;
+        g_pendingSeconds = 0.0;
+        g_elapsedSeconds = 0.0;
+
+        GameLevelManager::sharedState()->uploadComment(
+            comment,
+            CommentType::Level,
+            levelID,
+            0
+        );
+
+        log::info("AutoComment sent a level-comment upload request for level {}", levelID);
+    }
+};
+
+class $modify(AutoCommentMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) {
             return false;
         }
-
-        this->scheduleUpdate();
 
         auto menu = this->getChildByID("bottom-menu");
         if (menu) {
@@ -37,59 +145,16 @@ class $modify(AutoCommentMenuLayer, MenuLayer) {
         return true;
     }
 
-    void update(float dt) {
-        MenuLayer::update(dt);
-
-        auto mod = Mod::get();
-        if (!mod->getSettingValue<bool>("enabled")) {
-            m_autoCommentElapsed = 0.0;
-            return;
-        }
-
-        auto rawID = mod->getSettingValue<std::string>("level-id");
-        auto comment = mod->getSettingValue<std::string>("comment-text");
-        if (rawID.empty() || comment.empty() || m_autoCommentBusy) {
-            return;
-        }
-
-        int levelID = 0;
-        try {
-            levelID = std::stoi(rawID);
-        } catch (...) {
-            return;
-        }
-        if (levelID <= 0) {
-            return;
-        }
-
-        auto interval = mod->getSettingValue<int64_t>("interval-minutes");
-        if (interval < 5) interval = 5;
-
-        m_autoCommentElapsed += dt;
-        if (m_autoCommentElapsed < static_cast<double>(interval) * kSecondsPerMinute) {
-            return;
-        }
-
-        // Reset the timer before sending to prevent frame-by-frame retries.
-        m_autoCommentElapsed = 0.0;
-        m_autoCommentBusy = true;
-        GameLevelManager::sharedState()->uploadComment(
-            comment,
-            CommentType::Level,
-            levelID,
-            0
-        );
-        m_autoCommentBusy = false;
-        log::info("AutoComment submitted a comment for level {}", levelID);
-    }
-
     void onAutoCommentButton(CCObject*) {
         auto mod = Mod::get();
         auto enabled = mod->getSettingValue<bool>("enabled");
         auto rawID = mod->getSettingValue<std::string>("level-id");
-        auto comment = mod->getSettingValue<std::string>("comment-text");
-        auto interval = mod->getSettingValue<int64_t>("interval-minutes");
-        if (interval < 5) interval = 5;
+        auto comment = trim(mod->getSettingValue<std::string>("comment-text"));
+        auto interval = std::clamp<int64_t>(
+            mod->getSettingValue<int64_t>("interval-minutes"),
+            5,
+            1440
+        );
 
         FLAlertLayer::create(
             "AutoComment",
@@ -106,5 +171,9 @@ class $modify(AutoCommentMenuLayer, MenuLayer) {
 };
 
 $on_mod(Loaded) {
-    log::info("AutoComment loaded. Automatic comment interval minimum: 5 minutes.");
+    auto manager = GameLevelManager::sharedState();
+    if (manager) {
+        manager->scheduleUpdate();
+    }
+    log::info("AutoComment loaded. Timer minimum: 5 minutes.");
 }
