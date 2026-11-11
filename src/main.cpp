@@ -149,8 +149,8 @@ class $modify(AutoCommentGameLevelManager, GameLevelManager) {
         g_pendingSeconds = 0.0;
         g_elapsedSeconds = 0.0;
 
-        if (response == "1") {
-            log::info("AutoComment: Geometry Dash accepted the comment request.");
+        if (response != "-1") {
+            log::info("AutoComment: Geometry Dash accepted the comment request (response: {}).", response);
         }
         else {
             log::warn("AutoComment: comment request returned response: {}", response);
