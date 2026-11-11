@@ -1,0 +1,38 @@
+{
+  "geode": "v5.11.2",
+  "gd": {
+    "android": "2.2081"
+  },
+  "id": "autoposting.autocomment",
+  "name": "AutoComment",
+  "version": "v0.1.0",
+  "developer": "djdhsvsbdb-design",
+  "description": "Comment scheduler for Geometry Dash Android. Posting requires explicit confirmation.",
+  "settings": {
+    "level-id": {
+      "name": "Level ID",
+      "description": "The level to prepare a comment for.",
+      "type": "string",
+      "default": ""
+    },
+    "comment-text": {
+      "name": "Comment text",
+      "description": "Text to prepare for the selected level.",
+      "type": "string",
+      "default": ""
+    },
+    "interval-minutes": {
+      "name": "Reminder interval (minutes)",
+      "description": "Minimum interval is 5 minutes.",
+      "type": "int",
+      "default": 5,
+      "min": 5,
+      "max": 1440
+    },
+    "enabled": {
+      "name": "Enable reminders",
+      "type": "bool",
+      "default": false
+    }
+  }
+}
