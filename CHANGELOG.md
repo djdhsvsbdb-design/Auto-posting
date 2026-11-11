@@ -6,7 +6,9 @@ All notable project changes are recorded here.
 
 - Reset the posting timer when the level, comment, or interval changes.
 - Preserve the in-flight request lock when posting is disabled or settings become temporarily invalid.
-- Pause automatic retries after a 90-second request timeout to reduce duplicate-comment risk.
+- Observe the game's comment-upload completion callback and log its response.
+- Ignore completion callbacks when AutoComment has no request pending.
+- Retry after a 90-second callback timeout instead of permanently pausing.
 - Clarified that a local upload-method call is not confirmation of server publication.
 - Documented that the mod stops when Geometry Dash is fully closed.
 
