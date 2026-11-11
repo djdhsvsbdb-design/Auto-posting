@@ -4,10 +4,11 @@ All notable project changes are recorded here.
 
 ## Unreleased
 
-- Added project overview in `ABOUT.md`.
-- Documented current features, compatibility target, and known limitations.
-- Added this changelog.
-- Background execution behavior is awaiting clarification and implementation.
+- Reset the posting timer when the level, comment, or interval changes.
+- Preserve the in-flight request lock when posting is disabled or settings become temporarily invalid.
+- Pause automatic retries after a 90-second request timeout to reduce duplicate-comment risk.
+- Clarified that a local upload-method call is not confirmation of server publication.
+- Documented that the mod stops when Geometry Dash is fully closed.
 
 ## v0.1.0
 
