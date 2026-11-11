@@ -7,33 +7,33 @@
   "name": "AutoComment",
   "version": "v0.1.0",
   "developer": "djdhsvsbdb-design",
-  "description": "In-game comment reminders for Geometry Dash Android. Reminders show the level ID and prepared text; posting remains manual.",
+  "description": "Timed automatic level-comment posting for Geometry Dash Android, with a 5-minute minimum interval.",
   "settings": {
     "level-id": {
       "name": "Level ID",
-      "description": "Enter the numeric ID of the level you want to comment on.",
+      "description": "Numeric ID of the Geometry Dash level where comments will be posted.",
       "type": "string",
       "default": ""
     },
     "comment-text": {
       "name": "Comment text",
-      "description": "The comment text shown in each reminder. You submit it manually in Geometry Dash.",
+      "description": "Comment text that AutoComment submits on the selected level.",
       "type": "string",
       "default": ""
     },
     "interval-minutes": {
       "name": "Reminder interval (minutes)",
-      "description": "Reminder interval in minutes. Values below 5 are not allowed.",
+      "description": "Time between automatic comment submissions. Minimum 5 minutes.",
       "type": "int",
       "default": 5,
       "min": 5,
       "max": 1440
     },
     "enabled": {
-      "name": "Enable reminders",
+      "name": "Enable automatic posting",
       "type": "bool",
       "default": false,
-      "description": "Show reminders while the Geometry Dash main menu is open."
+      "description": "When enabled, submit the configured comment repeatedly while the main menu is open."
     }
   },
   "dependencies": {
