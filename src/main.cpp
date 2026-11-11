@@ -9,14 +9,13 @@ namespace {
 
 class $modify(AutoCommentMenuLayer, MenuLayer) {
     double m_autoCommentElapsed = 0.0;
+    bool m_autoCommentBusy = false;
 
     bool init() {
         if (!MenuLayer::init()) {
             return false;
         }
 
-        // The scheduler is attached to this menu layer, so it is automatically
-        // stopped when the layer is destroyed.
         this->scheduleUpdate();
 
         auto menu = this->getChildByID("bottom-menu");
@@ -35,7 +34,6 @@ class $modify(AutoCommentMenuLayer, MenuLayer) {
                 }
             }
         }
-
         return true;
     }
 
@@ -48,78 +46,65 @@ class $modify(AutoCommentMenuLayer, MenuLayer) {
             return;
         }
 
-        auto levelID = mod->getSettingValue<std::string>("level-id");
+        auto rawID = mod->getSettingValue<std::string>("level-id");
         auto comment = mod->getSettingValue<std::string>("comment-text");
-        if (levelID.empty() || comment.empty()) {
-            m_autoCommentElapsed = 0.0;
+        if (rawID.empty() || comment.empty() || m_autoCommentBusy) {
+            return;
+        }
+
+        int levelID = 0;
+        try {
+            levelID = std::stoi(rawID);
+        } catch (...) {
+            return;
+        }
+        if (levelID <= 0) {
             return;
         }
 
         auto interval = mod->getSettingValue<int64_t>("interval-minutes");
-        if (interval < 5) {
-            interval = 5;
-        }
+        if (interval < 5) interval = 5;
 
         m_autoCommentElapsed += dt;
-        auto requiredSeconds = static_cast<double>(interval) * kSecondsPerMinute;
-        if (m_autoCommentElapsed >= requiredSeconds) {
-            // Reset before opening the alert so the reminder cannot fire every frame.
-            m_autoCommentElapsed = 0.0;
-            this->showPreparedComment();
+        if (m_autoCommentElapsed < static_cast<double>(interval) * kSecondsPerMinute) {
+            return;
         }
+
+        // Reset the timer before sending to prevent frame-by-frame retries.
+        m_autoCommentElapsed = 0.0;
+        m_autoCommentBusy = true;
+        GameLevelManager::sharedState()->uploadComment(
+            comment,
+            CommentType::Level,
+            levelID,
+            0
+        );
+        m_autoCommentBusy = false;
+        log::info("AutoComment submitted a comment for level {}", levelID);
     }
 
     void onAutoCommentButton(CCObject*) {
         auto mod = Mod::get();
-        auto levelID = mod->getSettingValue<std::string>("level-id");
-        auto comment = mod->getSettingValue<std::string>("comment-text");
         auto enabled = mod->getSettingValue<bool>("enabled");
+        auto rawID = mod->getSettingValue<std::string>("level-id");
+        auto comment = mod->getSettingValue<std::string>("comment-text");
         auto interval = mod->getSettingValue<int64_t>("interval-minutes");
+        if (interval < 5) interval = 5;
 
-        if (levelID.empty() || comment.empty()) {
-            FLAlertLayer::create(
-                "AutoComment",
-                "Open the AutoComment mod settings and enter a Level ID and comment text first.",
-                "OK"
-            )->show();
-            return;
-        }
-
-        if (interval < 5) {
-            interval = 5;
-        }
-
-        auto status = enabled ? "Reminders are enabled." : "Reminders are currently paused.";
         FLAlertLayer::create(
             "AutoComment",
             fmt::format(
-                "{}\n\nLevel ID: {}\nInterval: {} minutes\n\nComment:\n{}",
-                status,
-                levelID,
+                "Automatic posting: {}\nLevel ID: {}\nInterval: {} minutes\n\nComment:\n{}",
+                enabled ? "ON" : "OFF",
+                rawID,
                 interval,
                 comment
             ),
             "Close"
         )->show();
     }
-
-    void showPreparedComment() {
-        auto mod = Mod::get();
-        auto levelID = mod->getSettingValue<std::string>("level-id");
-        auto comment = mod->getSettingValue<std::string>("comment-text");
-
-        FLAlertLayer::create(
-            "AutoComment reminder",
-            fmt::format(
-                "Time for your comment reminder.\n\nLevel ID: {}\n\nPrepared comment:\n{}\n\nOpen the level and submit it yourself if you still want to.",
-                levelID,
-                comment
-            ),
-            "OK"
-        )->show();
-    }
 };
 
 $on_mod(Loaded) {
-    log::info("AutoComment loaded. Reminder interval has a 5-minute minimum.");
+    log::info("AutoComment loaded. Automatic comment interval minimum: 5 minutes.");
 }
