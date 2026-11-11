@@ -35,5 +35,8 @@
       "default": false,
       "description": "Show reminders while the Geometry Dash main menu is open."
     }
+  },
+  "dependencies": {
+    "geode.node-ids": ">=v1.23.3"
   }
 }
