@@ -57,8 +57,14 @@ namespace {
 // GameLevelManager is a long-lived game singleton, unlike MenuLayer.
 // Scheduling on it keeps the timer active while changing menus/scenes.
 class $modify(AutoCommentGameLevelManager, GameLevelManager) {
-    void update(float dt) {
-        GameLevelManager::update(dt);
+    // Run as an explicitly scheduled selector. GameLevelManager does not
+    // expose an overridable update hook on all supported GD builds.
+    void autocommentTick(float dt) {
+        static bool loggedFirstTick = false;
+        if (!loggedFirstTick) {
+            log::info("AutoComment scheduler tick started.");
+            loggedFirstTick = true;
+        }
 
         auto mod = Mod::get();
         auto enabled = mod->getSettingValue<bool>("enabled");
@@ -216,7 +222,13 @@ class $modify(AutoCommentMenuLayer, MenuLayer) {
 $on_mod(Loaded) {
     auto manager = GameLevelManager::sharedState();
     if (manager) {
-        manager->scheduleUpdate();
+        manager->schedule(
+            schedule_selector(AutoCommentGameLevelManager::autocommentTick),
+            1.0f
+        );
+        log::info("AutoComment timer scheduled on GameLevelManager.");
+    } else {
+        log::error("AutoComment could not get GameLevelManager; timer was not scheduled.");
     }
     log::info("AutoComment loaded. Timer minimum: 5 minutes.");
 }
